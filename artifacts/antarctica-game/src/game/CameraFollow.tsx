@@ -1,35 +1,42 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef } from 'react';
+import { MutableRefObject, useRef } from 'react';
 import * as THREE from 'three';
 
 interface CameraFollowProps {
-  playerRef?: React.RefObject<THREE.Group | null>;
+  playerRef: MutableRefObject<THREE.Group | null>;
+  facingAngleRef: MutableRefObject<number>;
 }
 
-export default function CameraFollow(_props: CameraFollowProps) {
-  const { scene } = useThree();
-  const targetPos = useRef(new THREE.Vector3(5, 5, 15));
+const CAM_DIST = 12;
+const CAM_HEIGHT = 7;
+const CAM_LAG = 0.06;
 
-  useFrame(({ camera }) => {
-    const player = scene.children.find(child => {
-      if (child.type === 'Group') {
-        const hasBoxChild = child.children.some(c => c.type === 'Mesh');
-        const pos = child.position;
-        return hasBoxChild && pos.y > -5 && pos.y < 50;
-      }
-      return false;
-    });
+export default function CameraFollow({ playerRef, facingAngleRef }: CameraFollowProps) {
+  const { camera } = useThree();
+  const camTarget = useRef(new THREE.Vector3(0, 6, 12));
+  const lookTarget = useRef(new THREE.Vector3(0, 0, 0));
 
-    if (player) {
-      targetPos.current.set(
-        player.position.x + 3,
-        player.position.y + 6,
-        15
-      );
+  useFrame(() => {
+    if (!playerRef.current) return;
 
-      camera.position.lerp(targetPos.current, 0.05);
-      camera.lookAt(player.position.x + 2, player.position.y + 1, 0);
-    }
+    const pos = playerRef.current.position;
+    const angle = facingAngleRef.current;
+
+    // Camera stays behind the player based on their facing angle
+    const camX = pos.x - Math.sin(angle) * CAM_DIST;
+    const camY = pos.y + CAM_HEIGHT;
+    const camZ = pos.z - Math.cos(angle) * CAM_DIST;
+
+    camTarget.current.set(camX, camY, camZ);
+    camera.position.lerp(camTarget.current, CAM_LAG);
+
+    // Look slightly ahead of player
+    lookTarget.current.set(
+      pos.x + Math.sin(angle) * 2,
+      pos.y + 1.5,
+      pos.z + Math.cos(angle) * 2
+    );
+    camera.lookAt(lookTarget.current);
   });
 
   return null;

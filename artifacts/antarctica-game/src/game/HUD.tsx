@@ -87,14 +87,19 @@ export default function HUD() {
 
       <div style={{
         position: 'absolute',
-        bottom: '-60vh',
+        bottom: '10px',
         left: '50%',
         transform: 'translateX(-50%)',
-        color: 'rgba(255,255,255,0.5)',
+        color: 'rgba(255,255,255,0.6)',
         fontSize: '11px',
         textAlign: 'center',
+        background: 'rgba(0,0,0,0.35)',
+        borderRadius: '8px',
+        padding: '4px 12px',
+        backdropFilter: 'blur(4px)',
+        whiteSpace: 'nowrap',
       }}>
-        Arrow keys or WASD to move | SPACE to jump
+        Up/W = Forward   Left/A = Turn Left   Right/D = Turn Right   Space = Jump
       </div>
     </div>
   );

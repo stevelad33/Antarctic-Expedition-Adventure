@@ -1,50 +1,55 @@
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { UNIFORM_COLORS, GRAVITY, JUMP_FORCE, MOVE_SPEED, ATV_SPEED, LEVEL_CONFIGS } from './constants';
+import { UNIFORM_COLORS, GRAVITY, JUMP_FORCE, MOVE_SPEED, ATV_SPEED } from './constants';
 import { useGame } from './GameContext';
 
+interface Platform {
+  x: number; y: number; z: number;
+  width: number; height: number; depth: number;
+}
+
+interface CampMarker {
+  x: number; y: number; z: number; visited: boolean;
+}
+
 interface PlayerProps {
-  platforms: Array<{ x: number; y: number; z: number; width: number; height: number; depth: number }>;
-  camps: Array<{ x: number; y: number; z: number; visited: boolean }>;
-  atvCamps: Array<{ x: number; y: number; z: number; collected: boolean }>;
+  platforms: Platform[];
+  camps: CampMarker[];
+  atvCamps: CampMarker[];
+  goalPosition: THREE.Vector3;
   onReachEnd: () => void;
   onVisitCamp: (index: number) => void;
   onCollectATV: (index: number) => void;
   onFallOff: () => void;
+  groupRef: MutableRefObject<THREE.Group | null>;
+  facingAngleRef: MutableRefObject<number>;
 }
 
 export default function Player({
   platforms,
   camps,
   atvCamps,
+  goalPosition,
   onReachEnd,
   onVisitCamp,
   onCollectATV,
   onFallOff,
+  groupRef,
+  facingAngleRef,
 }: PlayerProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const velocity = useRef({ x: 0, y: 0, z: 0 });
+  const velRef = useRef(new THREE.Vector3());
   const isGrounded = useRef(true);
   const keys = useRef<Set<string>>(new Set());
-  const lastPos = useRef(0);
-  const { uniformColor, hasATV, level, updateStats, screen, gameStateRef } = useGame();
-  const config = LEVEL_CONFIGS[level];
+  const lastPos = useRef(new THREE.Vector3());
+  const reachedEnd = useRef(false);
 
+  const { uniformColor, hasATV, level, updateStats, gameStateRef } = useGame();
   const color = UNIFORM_COLORS[uniformColor] || UNIFORM_COLORS.red;
 
-  const bodyMaterial = useMemo(() => new THREE.MeshToonMaterial({ color }), [color]);
-  const skinMaterial = useMemo(() => new THREE.MeshToonMaterial({ color: '#FFCC99' }), []);
-  const eyeMaterial = useMemo(() => new THREE.MeshToonMaterial({ color: '#333333' }), []);
-  const bootMaterial = useMemo(() => new THREE.MeshToonMaterial({ color: '#5D4037' }), []);
-
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keys.current.add(e.key.toLowerCase());
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keys.current.delete(e.key.toLowerCase());
-    };
+    const handleKeyDown = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase());
+    const handleKeyUp = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
@@ -53,170 +58,224 @@ export default function Player({
     };
   }, []);
 
-  useFrame(() => {
+  // Reset player when level changes
+  useEffect(() => {
+    if (groupRef?.current) {
+      groupRef.current.position.set(0, 1.5, 0);
+      velRef.current.set(0, 0, 0);
+      lastPos.current.set(0, 0, 0);
+      if (facingAngleRef) facingAngleRef.current = 0;
+      reachedEnd.current = false;
+    }
+  }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useFrame((_, delta) => {
     if (!groupRef.current || gameStateRef.current.screen !== 'playing') return;
 
     const pos = groupRef.current.position;
-    const vel = velocity.current;
+    const vel = velRef.current;
     const currentHasATV = gameStateRef.current.hasATV;
+    const rotSpeed = 2.0;
     const speed = currentHasATV ? ATV_SPEED : MOVE_SPEED;
+    const dt = Math.min(delta, 0.05);
 
+    // Rotate facing angle with left/right
+    if (keys.current.has('arrowleft') || keys.current.has('a')) {
+      facingAngleRef.current -= rotSpeed * dt;
+    }
     if (keys.current.has('arrowright') || keys.current.has('d')) {
-      vel.x = speed;
-    } else if (keys.current.has('arrowleft') || keys.current.has('a')) {
-      vel.x = -speed;
-    } else {
-      vel.x *= 0.85;
+      facingAngleRef.current += rotSpeed * dt;
     }
 
-    if ((keys.current.has(' ') || keys.current.has('arrowup') || keys.current.has('w')) && isGrounded.current) {
+    const angle = facingAngleRef.current;
+    const fwdX = Math.sin(angle);
+    const fwdZ = Math.cos(angle);
+
+    let moving = false;
+    if (keys.current.has('arrowup') || keys.current.has('w')) {
+      vel.x = fwdX * speed;
+      vel.z = fwdZ * speed;
+      moving = true;
+    } else if (keys.current.has('arrowdown') || keys.current.has('s')) {
+      vel.x = -fwdX * speed;
+      vel.z = -fwdZ * speed;
+      moving = true;
+    }
+
+    if (!moving) {
+      vel.x *= 0.8;
+      vel.z *= 0.8;
+    }
+
+    // Jump
+    if (keys.current.has(' ') && isGrounded.current) {
       vel.y = JUMP_FORCE;
       isGrounded.current = false;
     }
 
+    // Gravity
     vel.y += GRAVITY;
+
+    // Integrate position
     pos.x += vel.x;
     pos.y += vel.y;
+    pos.z += vel.z;
 
-    pos.x = Math.max(-2, pos.x);
-
+    // Ground check (y=0 plane)
     isGrounded.current = false;
-
-    if (pos.y <= 0.8) {
-      if (pos.x >= -3 && pos.x <= config.length + 5) {
-        pos.y = 0.8;
-        vel.y = 0;
-        isGrounded.current = true;
-      }
+    if (pos.y <= 1.0) {
+      pos.y = 1.0;
+      vel.y = 0;
+      isGrounded.current = true;
     }
 
+    // Platform collision
     for (const plat of platforms) {
-      const halfW = plat.width / 2;
-      const halfD = plat.depth / 2;
+      const halfW = plat.width / 2 + 0.3;
+      const halfD = plat.depth / 2 + 0.3;
+      const platTop = plat.y + plat.height / 2;
+
       if (
         pos.x >= plat.x - halfW &&
         pos.x <= plat.x + halfW &&
         pos.z >= plat.z - halfD &&
-        pos.z <= plat.z + halfD &&
-        pos.y >= plat.y + plat.height / 2 - 0.1 &&
-        pos.y <= plat.y + plat.height / 2 + 1.0 &&
-        vel.y <= 0
+        pos.z <= plat.z + halfD
       ) {
-        pos.y = plat.y + plat.height / 2 + 0.8;
-        vel.y = 0;
-        isGrounded.current = true;
+        if (pos.y >= platTop - 0.2 && pos.y <= platTop + 1.5 && vel.y <= 0) {
+          pos.y = platTop + 1.0;
+          vel.y = 0;
+          isGrounded.current = true;
+        }
       }
     }
 
-    if (pos.y < -10) {
+    // Fall off
+    if (pos.y < -12) {
       onFallOff();
-      pos.set(0, 2, 0);
-      vel.x = 0;
-      vel.y = 0;
+      pos.set(0, 1.5, 0);
+      vel.set(0, 0, 0);
+      reachedEnd.current = false;
     }
 
-    const deltaX = Math.abs(pos.x - lastPos.current);
-    if (deltaX > 0.1) {
-      updateStats(deltaX * 0.05);
-      lastPos.current = pos.x;
+    // Rotate player mesh to face direction
+    groupRef.current.rotation.y = -angle + Math.PI;
+
+    // Track distance for energy drain
+    const delta3d = pos.distanceTo(lastPos.current);
+    if (delta3d > 0.1) {
+      updateStats(delta3d * 0.05);
+      lastPos.current.copy(pos);
     }
 
+    // Camp interactions
     camps.forEach((camp, i) => {
-      if (!camp.visited && Math.abs(pos.x - camp.x) < 2 && Math.abs(pos.y - camp.y) < 3) {
+      const dx = pos.x - camp.x;
+      const dz = pos.z - camp.z;
+      if (!camp.visited && Math.sqrt(dx * dx + dz * dz) < 2.5) {
         onVisitCamp(i);
       }
     });
 
     atvCamps.forEach((atv, i) => {
-      if (!atv.collected && Math.abs(pos.x - atv.x) < 2 && Math.abs(pos.y - atv.y) < 3) {
+      const dx = pos.x - atv.x;
+      const dz = pos.z - atv.z;
+      if (!atv.collected && Math.sqrt(dx * dx + dz * dz) < 2.5) {
         onCollectATV(i);
       }
     });
 
-    if (pos.x >= config.length - 5) {
-      onReachEnd();
+    // Reach goal
+    if (!reachedEnd.current) {
+      const dx = pos.x - goalPosition.x;
+      const dz = pos.z - goalPosition.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 5) {
+        reachedEnd.current = true;
+        onReachEnd();
+      }
     }
   });
 
-  useEffect(() => {
-    if (groupRef.current) {
-      groupRef.current.position.set(0, 2, 0);
-      velocity.current = { x: 0, y: 0, z: 0 };
-      lastPos.current = 0;
-    }
-  }, [level, screen]);
-
   return (
-    <group ref={groupRef} position={[0, 2, 0]}>
-      <mesh material={bodyMaterial} position={[0, 0, 0]}>
+    <group ref={groupRef} position={[0, 1.5, 0]}>
+      {/* Body */}
+      <mesh position={[0, 0, 0]}>
         <boxGeometry args={[0.7, 0.9, 0.6]} />
+        <meshToonMaterial color={color} />
       </mesh>
-
-      <mesh material={bodyMaterial} position={[0, 0.05, 0]}>
+      {/* Jacket */}
+      <mesh position={[0, 0.05, 0]}>
         <boxGeometry args={[0.9, 0.5, 0.65]} />
+        <meshToonMaterial color={color} />
       </mesh>
-
-      <mesh material={skinMaterial} position={[0, 0.75, 0]}>
+      {/* Head */}
+      <mesh position={[0, 0.75, 0]}>
         <boxGeometry args={[0.65, 0.6, 0.6]} />
+        <meshToonMaterial color="#FFCC99" />
       </mesh>
-
-      <mesh material={eyeMaterial} position={[-0.15, 0.8, 0.31]}>
+      {/* Eyes */}
+      <mesh position={[-0.15, 0.8, 0.31]}>
         <boxGeometry args={[0.12, 0.12, 0.05]} />
+        <meshToonMaterial color="#333333" />
       </mesh>
-      <mesh material={eyeMaterial} position={[0.15, 0.8, 0.31]}>
+      <mesh position={[0.15, 0.8, 0.31]}>
         <boxGeometry args={[0.12, 0.12, 0.05]} />
+        <meshToonMaterial color="#333333" />
       </mesh>
-
-      <mesh material={bodyMaterial} position={[0, 1.0, 0]}>
+      {/* Hat */}
+      <mesh position={[0, 1.1, 0]}>
         <boxGeometry args={[0.7, 0.15, 0.65]} />
+        <meshToonMaterial color={color} />
       </mesh>
-
-      <mesh material={bodyMaterial} position={[-0.5, 0.1, 0]}>
+      {/* Arms */}
+      <mesh position={[-0.5, 0.1, 0]}>
         <boxGeometry args={[0.3, 0.7, 0.35]} />
+        <meshToonMaterial color={color} />
       </mesh>
-      <mesh material={bodyMaterial} position={[0.5, 0.1, 0]}>
+      <mesh position={[0.5, 0.1, 0]}>
         <boxGeometry args={[0.3, 0.7, 0.35]} />
+        <meshToonMaterial color={color} />
       </mesh>
-
-      <mesh material={bodyMaterial} position={[-0.2, -0.65, 0]}>
+      {/* Legs */}
+      <mesh position={[-0.2, -0.65, 0]}>
         <boxGeometry args={[0.3, 0.5, 0.35]} />
+        <meshToonMaterial color={color} />
       </mesh>
-      <mesh material={bodyMaterial} position={[0.2, -0.65, 0]}>
+      <mesh position={[0.2, -0.65, 0]}>
         <boxGeometry args={[0.3, 0.5, 0.35]} />
+        <meshToonMaterial color={color} />
+      </mesh>
+      {/* Boots */}
+      <mesh position={[-0.2, -1.0, 0.05]}>
+        <boxGeometry args={[0.35, 0.25, 0.45]} />
+        <meshToonMaterial color="#5D4037" />
+      </mesh>
+      <mesh position={[0.2, -1.0, 0.05]}>
+        <boxGeometry args={[0.35, 0.25, 0.45]} />
+        <meshToonMaterial color="#5D4037" />
       </mesh>
 
-      <mesh material={bootMaterial} position={[-0.2, -1.0, 0.05]}>
-        <boxGeometry args={[0.35, 0.25, 0.45]} />
-      </mesh>
-      <mesh material={bootMaterial} position={[0.2, -1.0, 0.05]}>
-        <boxGeometry args={[0.35, 0.25, 0.45]} />
-      </mesh>
-
+      {/* ATV */}
       {hasATV && (
         <group position={[0, -0.8, 0]}>
           <mesh position={[0, -0.3, 0]}>
             <boxGeometry args={[1.4, 0.4, 0.9]} />
             <meshToonMaterial color="#FF6F00" />
           </mesh>
-          <mesh position={[-0.5, -0.5, 0.5]}>
+          <mesh position={[-0.5, -0.5, 0.4]}>
             <cylinderGeometry args={[0.2, 0.2, 0.15, 8]} />
             <meshToonMaterial color="#333" />
           </mesh>
-          <mesh position={[0.5, -0.5, 0.5]}>
+          <mesh position={[0.5, -0.5, 0.4]}>
             <cylinderGeometry args={[0.2, 0.2, 0.15, 8]} />
             <meshToonMaterial color="#333" />
           </mesh>
-          <mesh position={[-0.5, -0.5, -0.5]}>
+          <mesh position={[-0.5, -0.5, -0.4]}>
             <cylinderGeometry args={[0.2, 0.2, 0.15, 8]} />
             <meshToonMaterial color="#333" />
           </mesh>
-          <mesh position={[0.5, -0.5, -0.5]}>
+          <mesh position={[0.5, -0.5, -0.4]}>
             <cylinderGeometry args={[0.2, 0.2, 0.15, 8]} />
             <meshToonMaterial color="#333" />
-          </mesh>
-          <mesh position={[0.0, 0.1, 0]}>
-            <boxGeometry args={[0.3, 0.5, 0.1]} />
-            <meshToonMaterial color="#FF8F00" />
           </mesh>
         </group>
       )}
