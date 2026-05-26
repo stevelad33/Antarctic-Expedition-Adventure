@@ -1,10 +1,33 @@
 import { useGame } from '../game/GameContext';
-import { UNIFORM_COLORS, LEVEL_NAMES } from '../game/constants';
+import { UNIFORM_COLORS, LEVEL_NAMES, SHOP_ITEMS } from '../game/constants';
 
 export default function Menu() {
-  const { screen, uniformColor, setUniformColor, startGame, nextLevel, restartGame, score, level } = useGame();
+  const {
+    screen,
+    uniformColor,
+    setUniformColor,
+    startGame,
+    nextLevel,
+    restartGame,
+    score,
+    level,
+    coins,
+    purchaseItem,
+    useItem,
+    hasItem,
+    isUniformUnlocked,
+    setScreen,
+  } = useGame();
 
   if (screen === 'playing') return null;
+
+  const handlePurchase = (item: typeof SHOP_ITEMS[0]) => {
+    purchaseItem(item);
+  };
+
+  const handleUseItem = (itemId: string) => {
+    useItem(itemId);
+  };
 
   return (
     <div style={{
@@ -137,41 +160,73 @@ export default function Menu() {
               </div>
             </div>
 
-            <button
-              onClick={startGame}
-              style={{
-                padding: '16px 48px',
-                fontSize: '22px',
-                fontWeight: 800,
-                color: '#FFFFFF',
-                background: 'linear-gradient(180deg, #43A047 0%, #2E7D32 100%)',
-                border: 'none',
-                borderRadius: '16px',
-                cursor: 'pointer',
-                boxShadow: '0 6px 0 #1B5E20, 0 8px 20px rgba(0,0,0,0.3)',
-                letterSpacing: '2px',
-                animation: 'pulse 2s ease-in-out infinite',
-                fontFamily: 'inherit',
-              }}
-            >
-              START EXPEDITION
-            </button>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+              <button
+                onClick={startGame}
+                style={{
+                  padding: '16px 32px',
+                  fontSize: '18px',
+                  fontWeight: 800,
+                  color: '#FFFFFF',
+                  background: 'linear-gradient(180deg, #43A047 0%, #2E7D32 100%)',
+                  border: 'none',
+                  borderRadius: '16px',
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 0 #1B5E20, 0 8px 20px rgba(0,0,0,0.3)',
+                  letterSpacing: '2px',
+                  animation: 'pulse 2s ease-in-out infinite',
+                  fontFamily: 'inherit',
+                }}
+              >
+                START EXPEDITION
+              </button>
+              <button
+                onClick={() => setScreen('shop')}
+                style={{
+                  padding: '16px 32px',
+                  fontSize: '18px',
+                  fontWeight: 800,
+                  color: '#FFFFFF',
+                  background: 'linear-gradient(180deg, #FFA726 0%, #F57C00 100%)',
+                  border: 'none',
+                  borderRadius: '16px',
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 0 #E65100, 0 8px 20px rgba(0,0,0,0.3)',
+                  letterSpacing: '2px',
+                  fontFamily: 'inherit',
+                }}
+              >
+                SHOP
+              </button>
+            </div>
 
             <div style={{
-              marginTop: '32px',
+              background: 'rgba(255,215,0,0.2)',
+              borderRadius: '12px',
+              padding: '8px 16px',
+              display: 'inline-block',
+              marginBottom: '16px',
+            }}>
+              <span style={{ color: '#FFD700', fontSize: '20px', fontWeight: 700 }}>
+                {coins} coins
+              </span>
+            </div>
+
+            <div style={{
+              marginTop: '24px',
               color: '#B3E5FC',
               fontSize: '12px',
               lineHeight: '1.8',
             }}>
               <div>Arrow keys / WASD to move</div>
-              <div>SPACE to jump</div>
-              <div>Reach camps to rest and find ATVs</div>
-              <div>Make it to the South Pole!</div>
+              <div>SPACE to jump   |   E to delete obstacles</div>
+              <div>Collect coins   |   Reach camps to rest</div>
+              <div>6 levels to the South Pole!</div>
             </div>
           </>
         )}
 
-        {screen === 'levelComplete' && (
+        {screen === 'levelComplete' && level < 5 && (
           <>
             <div style={{
               fontSize: '36px',
@@ -186,53 +241,169 @@ export default function Menu() {
             <div style={{ color: '#E1F5FE', fontSize: '16px', marginBottom: '8px' }}>
               You completed: {LEVEL_NAMES[level]}
             </div>
-            <div style={{ color: '#FFD54F', fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>
-              Score: {score}
+            <div style={{ color: '#FFD54F', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
+              Score: {score}   |   Coins: {coins}
             </div>
-            {level < 3 ? (
-              <>
-                <div style={{ color: '#B3E5FC', fontSize: '14px', marginBottom: '20px' }}>
-                  Next: {LEVEL_NAMES[level + 1]}
-                </div>
-                <button
-                  onClick={nextLevel}
-                  style={{
-                    padding: '14px 40px',
-                    fontSize: '20px',
-                    fontWeight: 800,
-                    color: '#FFFFFF',
-                    background: 'linear-gradient(180deg, #43A047 0%, #2E7D32 100%)',
-                    border: 'none',
-                    borderRadius: '16px',
-                    cursor: 'pointer',
-                    boxShadow: '0 6px 0 #1B5E20, 0 8px 20px rgba(0,0,0,0.3)',
-                    letterSpacing: '2px',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  NEXT LEVEL
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={nextLevel}
-                style={{
-                  padding: '14px 40px',
-                  fontSize: '20px',
-                  fontWeight: 800,
-                  color: '#FFFFFF',
-                  background: 'linear-gradient(180deg, #FFA726 0%, #F57C00 100%)',
-                  border: 'none',
-                  borderRadius: '16px',
-                  cursor: 'pointer',
-                  boxShadow: '0 6px 0 #E65100, 0 8px 20px rgba(0,0,0,0.3)',
-                  letterSpacing: '2px',
-                  fontFamily: 'inherit',
-                }}
-              >
-                FLY HOME!
-              </button>
-            )}
+            <div style={{ color: '#B3E5FC', fontSize: '14px', marginBottom: '20px' }}>
+              Next: {LEVEL_NAMES[level + 1]}
+            </div>
+            <button
+              onClick={nextLevel}
+              style={{
+                padding: '14px 40px',
+                fontSize: '20px',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                background: 'linear-gradient(180deg, #43A047 0%, #2E7D32 100%)',
+                border: 'none',
+                borderRadius: '16px',
+                cursor: 'pointer',
+                boxShadow: '0 6px 0 #1B5E20, 0 8px 20px rgba(0,0,0,0.3)',
+                letterSpacing: '2px',
+                fontFamily: 'inherit',
+              }}
+            >
+              NEXT LEVEL
+            </button>
+          </>
+        )}
+
+        {screen === 'levelComplete' && level >= 5 && (
+          <>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: 900,
+              color: '#FFD54F',
+              textShadow: '3px 3px 0 #01579B',
+              marginBottom: '16px',
+              animation: 'bounce 1s ease-in-out infinite',
+            }}>
+              LEVEL COMPLETE!
+            </div>
+            <div style={{ color: '#E1F5FE', fontSize: '16px', marginBottom: '8px' }}>
+              You completed: {LEVEL_NAMES[level]}
+            </div>
+            <div style={{ color: '#FFD54F', fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>
+              Score: {score}   |   Coins: {coins}
+            </div>
+            <button
+              onClick={nextLevel}
+              style={{
+                padding: '14px 40px',
+                fontSize: '20px',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                background: 'linear-gradient(180deg, #FFA726 0%, #F57C00 100%)',
+                border: 'none',
+                borderRadius: '16px',
+                cursor: 'pointer',
+                boxShadow: '0 6px 0 #E65100, 0 8px 20px rgba(0,0,0,0.3)',
+                letterSpacing: '2px',
+                fontFamily: 'inherit',
+              }}
+            >
+              FLY HOME!
+            </button>
+          </>
+        )}
+
+        {screen === 'shop' && (
+          <>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: 900,
+              color: '#FFD54F',
+              textShadow: '3px 3px 0 #E65100',
+              marginBottom: '8px',
+            }}>
+              EXPEDITION SHOP
+            </div>
+            <div style={{
+              color: '#FFD700',
+              fontSize: '24px',
+              fontWeight: 700,
+              marginBottom: '24px',
+            }}>
+              {coins} coins
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '12px',
+              maxWidth: '450px',
+              marginBottom: '24px',
+            }}>
+              {SHOP_ITEMS.map((item) => {
+                const owned = hasItem(item.id);
+                const canAfford = coins >= item.price;
+                const isUnlocked = item.effect === 'cosmetic' ? isUniformUnlocked(item.id.replace('uniform_', '')) : false;
+                const showOwned = owned || isUnlocked;
+
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      background: showOwned
+                        ? 'rgba(67,160,71,0.3)'
+                        : canAfford
+                          ? 'rgba(255,255,255,0.15)'
+                          : 'rgba(100,100,100,0.3)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      cursor: showOwned ? 'default' : canAfford ? 'pointer' : 'not-allowed',
+                      border: showOwned
+                        ? '2px solid #43A047'
+                        : canAfford
+                          ? '2px solid rgba(255,255,255,0.3)'
+                          : '2px solid transparent',
+                      opacity: showOwned ? 0.8 : canAfford ? 1 : 0.6,
+                    }}
+                    onClick={() => !showOwned && canAfford && handlePurchase(item)}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '4px',
+                    }}>
+                      <span style={{ fontSize: '24px' }}>{item.icon}</span>
+                      <span style={{
+                        color: '#FFFFFF',
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        textAlign: 'left',
+                      }}>
+                        {item.name}
+                      </span>
+                    </div>
+                    <div style={{
+                      color: showOwned ? '#43A047' : '#FFD700',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                    }}>
+                      {showOwned ? 'OWNED' : `${item.price} coins`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setScreen('menu')}
+              style={{
+                padding: '12px 32px',
+                fontSize: '16px',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                background: 'linear-gradient(180deg, #78909C 0%, #546E7A 100%)',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 0 #37474F, 0 6px 16px rgba(0,0,0,0.3)',
+                fontFamily: 'inherit',
+              }}
+            >
+              BACK TO MENU
+            </button>
           </>
         )}
 

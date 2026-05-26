@@ -1,7 +1,7 @@
 import { useRef, useEffect, MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { UNIFORM_COLORS, GRAVITY, JUMP_FORCE, MOVE_SPEED, ATV_SPEED } from './constants';
+import { UNIFORM_COLORS, GRAVITY, JUMP_FORCE, MOVE_SPEED, ATV_SPEED, BOOST_SPEED } from './constants';
 import { useGame } from './GameContext';
 
 interface Platform {
@@ -13,14 +13,27 @@ interface CampMarker {
   x: number; y: number; z: number; visited: boolean;
 }
 
+interface CoinMarker {
+  x: number; y: number; z: number; collected: boolean;
+}
+
+interface ObstacleMarker {
+  x: number; y: number; z: number;
+}
+
 interface PlayerProps {
   platforms: Platform[];
   camps: CampMarker[];
   atvCamps: CampMarker[];
+  coins: CoinMarker[];
+  obstacles: ObstacleMarker[];
   goalPosition: THREE.Vector3;
   onReachEnd: () => void;
   onVisitCamp: (index: number) => void;
   onCollectATV: (index: number) => void;
+  onCollectCoin: (index: number) => void;
+  onDeleteObstacle: (index: number) => void;
+  onObstacleCollision: () => void;
   onFallOff: () => void;
   groupRef: MutableRefObject<THREE.Group | null>;
   facingAngleRef: MutableRefObject<number>;
@@ -30,10 +43,15 @@ export default function Player({
   platforms,
   camps,
   atvCamps,
+  coins,
+  obstacles,
   goalPosition,
   onReachEnd,
   onVisitCamp,
   onCollectATV,
+  onCollectCoin,
+  onDeleteObstacle,
+  onObstacleCollision,
   onFallOff,
   groupRef,
   facingAngleRef,
@@ -43,8 +61,9 @@ export default function Player({
   const keys = useRef<Set<string>>(new Set());
   const lastPos = useRef(new THREE.Vector3());
   const reachedEnd = useRef(false);
+  const obstacleHitCooldown = useRef(false);
 
-  const { uniformColor, hasATV, level, updateStats, gameStateRef } = useGame();
+  const { uniformColor, hasATV, speedBoostActive, shieldActive, heatPackActive, level, updateStats, gameStateRef } = useGame();
   const color = UNIFORM_COLORS[uniformColor] || UNIFORM_COLORS.red;
 
   useEffect(() => {
@@ -75,9 +94,22 @@ export default function Player({
     const pos = groupRef.current.position;
     const vel = velRef.current;
     const currentHasATV = gameStateRef.current.hasATV;
+    const currentSpeedBoost = gameStateRef.current.speedBoostActive;
+    const currentShield = gameStateRef.current.shieldActive;
+    const currentHeatPack = gameStateRef.current.heatPackActive;
     const rotSpeed = 2.0;
-    const speed = currentHasATV ? ATV_SPEED : MOVE_SPEED;
+
+    // Calculate base speed with ATV and speed boost
+    let baseSpeed = currentHasATV ? ATV_SPEED : MOVE_SPEED;
+    if (currentSpeedBoost) {
+      baseSpeed *= 1.5; // 50% speed boost
+    }
+    const speed = baseSpeed;
     const dt = Math.min(delta, 0.05);
+
+    // Heat pack reduces energy drain (handled in updateStats via gameStateRef)
+    void currentHeatPack;
+    void currentShield;
 
     // Rotate facing angle with left/right
     if (keys.current.has('arrowleft') || keys.current.has('a')) {
@@ -183,6 +215,44 @@ export default function Player({
         onCollectATV(i);
       }
     });
+
+    // Coin collection
+    coins.forEach((coin, i) => {
+      if (coin.collected) return;
+      const dx = pos.x - coin.x;
+      const dy = pos.y - coin.y;
+      const dz = pos.z - coin.z;
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 1.2) {
+        onCollectCoin(i);
+      }
+    });
+
+    // Obstacle interaction (bags/crates)
+    obstacles.forEach((obs, i) => {
+      const dx = pos.x - obs.x;
+      const dy = pos.y - obs.y;
+      const dz = pos.z - obs.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      // Press E or click to delete obstacle when near
+      if (dist < 2.0 && keys.current.has('e')) {
+        onDeleteObstacle(i);
+      }
+      // Collision with obstacle causes damage
+      else if (dist < 1.0 && !obstacleHitCooldown.current && !currentShield) {
+        obstacleHitCooldown.current = true;
+        onObstacleCollision();
+        // Brief invulnerability after hitting obstacle
+        setTimeout(() => {
+          obstacleHitCooldown.current = false;
+        }, 1000);
+      }
+    });
+
+    // Shield protects from damage
+    if (currentShield) {
+      obstacleHitCooldown.current = false;
+    }
 
     // Reach goal
     if (!reachedEnd.current) {
