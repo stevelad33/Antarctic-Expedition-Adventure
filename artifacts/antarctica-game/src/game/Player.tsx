@@ -211,7 +211,7 @@ export default function Player({
     atvCamps.forEach((atv, i) => {
       const dx = pos.x - atv.x;
       const dz = pos.z - atv.z;
-      if (!atv.collected && Math.sqrt(dx * dx + dz * dz) < 2.5) {
+      if (!atv.visited && Math.sqrt(dx * dx + dz * dz) < 2.5) {
         onCollectATV(i);
       }
     });

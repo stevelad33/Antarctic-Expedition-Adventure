@@ -335,7 +335,7 @@ export default function Level() {
       <Player
         platforms={platforms}
         camps={restCamps.map(c => ({ x: c.x, y: c.y, z: c.z, visited: c.visited }))}
-        atvCamps={atvCamps.map(c => ({ x: c.x, y: c.y, z: c.z, collected: c.visited }))}
+        atvCamps={atvCamps.map(c => ({ x: c.x, y: c.y, z: c.z, visited: c.visited }))}
         coins={coins.map(c => ({ x: c.x, y: c.y, z: c.z, collected: c.collected }))}
         obstacles={activeObstacles.map(o => ({ x: o.x, y: o.y, z: o.z }))}
         goalPosition={goalPosition}

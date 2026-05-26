@@ -306,7 +306,7 @@ export default function Environment({ level, path }: EnvironmentProps) {
       {/* Icebergs */}
       {icebergs.map((berg, i) => (
         <mesh
-          key={berg.i}
+          key={`iceberg-${i}`}
           position={[berg.x, berg.scale * 0.3, berg.z]}
           rotation={[0.1, berg.rotation, 0.05]}
         >
